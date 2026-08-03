@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Arc Agent Wallet — the engine signs only what it approves</title>
+<style>
+:root {
+  --paper:#eef0f4; --surface:#fff; --ink:#141820; --ink-soft:#59616e;
+  --rule:#d7dbe3; --high:#8e2f39; --high-wash:#f7e8e9;
+  --mid:#8a6410; --mid-wash:#f8efdb; --ok:#2c6e49; --ok-wash:#e8f1eb;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:ui-monospace,"Cascadia Code",Menlo,Consolas,monospace;
+}
+* { box-sizing: border-box; }
+body { margin:0; background:var(--paper); color:var(--ink);
+  font-family:var(--sans); font-size:15px; line-height:1.55; }
+.shell { max-width:46rem; margin:0 auto; padding:2rem 1.25rem 4rem; }
+.tag { font-family:var(--mono); font-size:.7rem; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--ink-soft); }
+h1 { font-size:1.6rem; letter-spacing:-.02em; margin:.4rem 0 .5rem; }
+.lede { color:var(--ink-soft); margin:0 0 1.5rem; }
+.net { display:inline-flex; gap:.5rem; align-items:center; font-family:var(--mono);
+  font-size:.72rem; color:var(--ink-soft); border:1px solid var(--rule);
+  border-radius:999px; padding:.2rem .7rem; margin-bottom:1.5rem; }
+.net b { color:var(--ink); }
+.card { background:var(--surface); border:1px solid var(--rule);
+  border-radius:5px; padding:1.1rem 1.2rem; margin-bottom:1rem; }
+.card h2 { font-family:var(--mono); font-size:.7rem; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--ink-soft); margin:0 0 .8rem; }
+label { display:block; font-size:.8rem; color:var(--ink-soft); margin:.6rem 0 .2rem; }
+input, select { width:100%; padding:.55rem .65rem; border:1px solid var(--rule);
+  border-radius:3px; font-family:var(--mono); font-size:.85rem; }
+.row { display:flex; gap:.8rem; }
+.row > div { flex:1; }
+button { font-size:.9rem; font-weight:500; border:none; border-radius:3px;
+  padding:.6rem 1.1rem; cursor:pointer; }
+.primary { background:var(--ink); color:var(--paper); }
+.primary:disabled { opacity:.4; cursor:default; }
+.ghost { background:none; border:1px solid var(--rule); color:var(--ink); }
+.actions { display:flex; gap:.6rem; align-items:center; margin-top:1rem; flex-wrap:wrap; }
+.status { font-size:.8rem; color:var(--ink-soft); }
+.verdict { border-left:3px solid var(--ink-soft); padding:.7rem .9rem; margin-top:1rem;
+  border-radius:0 4px 4px 0; background:var(--surface); }
+.verdict[data-d="allow"]   { border-color:var(--ok);   background:var(--ok-wash); }
+.verdict[data-d="confirm"] { border-color:var(--mid);  background:var(--mid-wash); }
+.verdict[data-d="block"]   { border-color:var(--high); background:var(--high-wash); }
+.verdict h3 { margin:0 0 .3rem; font-size:.95rem; }
+.verdict .why { font-size:.85rem; color:var(--ink-soft); }
+.signal { font-size:.82rem; margin-top:.4rem; padding-left:.8rem;
+  border-left:2px solid var(--rule); }
+.hint { font-size:.75rem; color:var(--ink-soft); margin-top:.5rem; }
+.foot { margin-top:1.5rem; font-size:.75rem; color:var(--ink-soft);
+  border-top:1px solid var(--rule); padding-top:.9rem; }
+.foot a { color:var(--ink); }
+code { font-family:var(--mono); font-size:.8rem; background:var(--paper);
+  padding:.1rem .3rem; border-radius:3px; }
+.mono-sm { font-family:var(--mono); font-size:.78rem; color:var(--ink-soft); word-break:break-all; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="tag">Arc Agent Wallet</div>
+  <h1>The engine signs only what it approves.</h1>
+  <p class="lede">A wallet on Arc testnet where every transaction is screened by
+  <a href="https://github.com/rusmoody/guardrails-core">guardrails-core</a> before
+  it can be signed. A drainer approval is refused outright; anything unusual asks
+  first. The same open engine that catches scam messages, pointed at your wallet.</p>
+
+  <div class="net">Network: <b>Arc Testnet</b> · chain <b>5042002</b> · gas paid in <b>USDC</b></div>
+
+  <div class="card">
+    <h2>1 · Connect</h2>
+    <div class="actions">
+      <button class="primary" id="connect">Connect wallet</button>
+      <span class="status" id="conn-status">Not connected.</span>
+    </div>
+    <p class="hint" id="net-hint" hidden>You'll be asked to add/switch to Arc Testnet.
+    Get test USDC from <a href="https://faucet.circle.com" target="_blank" rel="noopener">faucet.circle.com</a>.</p>
+    <div class="mono-sm" id="acct" style="margin-top:.6rem"></div>
+  </div>
+
+  <div class="card">
+    <h2>2 · Propose a transaction</h2>
+    <label>Type</label>
+    <select id="kind">
+      <option value="transfer">Transfer USDC</option>
+      <option value="approve">Approve a contract to spend your USDC</option>
+    </select>
+
+    <div id="transfer-fields">
+      <div class="row">
+        <div>
+          <label>Recipient address</label>
+          <input id="to" placeholder="0x…" spellcheck="false">
+        </div>
+        <div>
+          <label>Amount (USDC)</label>
+          <input id="amount" placeholder="0.00" inputmode="decimal">
+        </div>
+      </div>
+    </div>
+
+    <div id="approve-fields" hidden>
+      <label>Contract address</label>
+      <input id="spender" placeholder="0x…" spellcheck="false">
+      <label>Allowance</label>
+      <select id="allowance-kind">
+        <option value="unlimited">Unlimited (what drainers ask for)</option>
+        <option value="exact">Exact amount only</option>
+      </select>
+      <div id="exact-wrap" hidden>
+        <label>Amount (USDC)</label>
+        <input id="allow-amount" placeholder="0.00" inputmode="decimal">
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="primary" id="screen" disabled>Screen with the engine</button>
+    </div>
+  </div>
+
+  <div id="result"></div>
+
+  <div class="foot">
+    Testnet only — never mainnet. Your private key never leaves your wallet;
+    this page holds no key and sends nothing to any server. The engine runs in your browser.<br>
+    Engine: <a href="https://github.com/rusmoody/guardrails-core">guardrails-core</a> ·
+    Explorer: <a href="https://testnet.arcscan.app" target="_blank" rel="noopener">arcscan</a>
+  </div>
+</div>
+
+<script type="module" src="wallet.js"></script>
+</body>
+</html>
